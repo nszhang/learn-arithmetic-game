@@ -467,7 +467,7 @@ function startTimer() {
     }
     
     const startTime = Date.now();
-    updateTimer(gameState.timeLimit, totalTime);
+    updateTimer(totalTime, totalTime);
     
     gameState.timerInterval = setInterval(() => {
         const elapsed = Date.now() - startTime;
@@ -481,7 +481,7 @@ function startTimer() {
         } else {
             if (seconds !== gameState.timeRemaining) {
                 gameState.timeRemaining = seconds;
-                updateTimer(seconds, totalTime);
+                updateTimer(remaining, totalTime);
                 if (seconds <= CONSTANTS.LOW_TIME_THRESHOLD) {
                     playSoundSafely(timerTickSound);
                 }
@@ -493,14 +493,14 @@ function startTimer() {
 // Update timer display and bar
 function updateTimer(timeRemaining, totalTime) {
     if (timerDisplay) {
-        timerDisplay.textContent = timeRemaining;
+        timerDisplay.textContent = Math.ceil(timeRemaining / 1000);
     }
     if (timerBar) {
-        const percentage = Math.max(0, Math.min(100, (timeRemaining / (totalTime / 1000)) * 100));
+        const percentage = Math.max(0, Math.min(100, (timeRemaining / totalTime) * 100));
         timerBar.style.width = `${percentage}%`;
         
         // Update color based on time remaining
-        if (timeRemaining <= CONSTANTS.LOW_TIME_THRESHOLD) {
+        if (Math.ceil(timeRemaining / 1000) <= CONSTANTS.LOW_TIME_THRESHOLD) {
             timerBar.classList.add('bg-red-500');
             timerBar.classList.remove('bg-blue-500');
         } else {
