@@ -88,60 +88,6 @@ function playSoundSafely(audioElement) {
     }
 }
 
-// Function to initialize audio
-function initAudio() {
-    const audioInitButton = document.getElementById('enable-audio');
-    const audioInitContainer = document.getElementById('audio-init-container');
-    
-    const enableAudio = () => {
-        if (audioInitContainer) {
-            audioInitContainer.style.display = 'none';
-        }
-        
-        [correctSound, wrongSound, timerTickSound].forEach(sound => {
-            if (sound) {
-                const originalVolume = sound.volume;
-                sound.volume = 0;
-                const promise = sound.play();
-                if (promise !== undefined) {
-                    promise.then(() => {
-                        sound.pause();
-                        sound.currentTime = 0;
-                        sound.volume = originalVolume;
-                    }).catch(() => {
-                        sound.volume = originalVolume;
-                    });
-                }
-            }
-        });
-        
-        document.removeEventListener('click', enableAudio);
-        document.removeEventListener('keydown', enableAudio);
-        if (audioInitButton) {
-            audioInitButton.removeEventListener('click', enableAudio);
-        }
-        
-        try {
-            sessionStorage.setItem('audioInitialized', 'true');
-        } catch (e) {}
-        
-        console.log('Audio initialized');
-    };
-    
-    if (audioInitButton) {
-        audioInitButton.addEventListener('click', enableAudio);
-    }
-    
-    document.addEventListener('click', enableAudio);
-    document.addEventListener('keydown', enableAudio);
-    
-    try {
-        if (sessionStorage.getItem('audioInitialized') === 'true' && audioInitContainer) {
-            audioInitContainer.style.display = 'none';
-        }
-    } catch (e) {}
-}
-
 // Sound toggle functions
 function toggleSound() {
     gameState.soundEnabled = !gameState.soundEnabled;
@@ -199,10 +145,6 @@ function stopGame() {
 
 // Initialize the game
 function initGame() {
-    // Initialize audio and sound toggle
-    initAudio();
-    initSoundToggle();
-    
     // Initialize sliders
     if (questionCountSlider && questionCountDisplay) {
         questionCountSlider.addEventListener('input', () => {
@@ -295,6 +237,8 @@ function initGame() {
             }
         });
     });
+    
+    initSoundToggle();
     
     showSelectionScreen();
 }
