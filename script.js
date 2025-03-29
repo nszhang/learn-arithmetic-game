@@ -8,13 +8,14 @@ const CONSTANTS = {
     TIMER_INTERVAL: 100,
     TRANSITION_DELAY: 2000,
     LOW_TIME_THRESHOLD: 3,
-    MAX_ATTEMPTS: 100
+    MAX_ATTEMPTS: 100,
+    OPERATIONS: ['addition', 'subtraction', 'multiplication']
 };
 
 // Game state
 const gameState = {
     currentScreen: 'selection',
-    selectedOperation: null,
+    selectedOperations: new Set(),
     selectedNumbers: new Set(),
     isMixedMode: false,
     score: 0,
@@ -32,7 +33,7 @@ const gameState = {
     soundEnabled: true,
     pendingTimeouts: [],
     lastSelections: {
-        operation: null,
+        operations: new Set(),
         numbers: new Set()
     },
     usedQuestions: new Set()
@@ -104,7 +105,7 @@ class UIManager {
 
     static resetAnswerButtons() {
         answerButtons.forEach(button => {
-            button.classList.remove('bg-green-500', 'bg-red-500', 'text-white');
+            button.classList.remove('bg-green-200', 'bg-red-500', 'text-white');
         });
     }
 
@@ -277,12 +278,11 @@ function initGame() {
     operationButtons.forEach(button => {
         button.addEventListener('click', () => {
             const operation = button.getAttribute('data-operation');
-            if (gameState.selectedOperation === operation) {
-                gameState.selectedOperation = null;
+            if (gameState.selectedOperations.has(operation)) {
+                gameState.selectedOperations.delete(operation);
                 button.classList.remove('selected');
             } else {
-                operationButtons.forEach(b => b.classList.remove('selected'));
-                gameState.selectedOperation = operation;
+                gameState.selectedOperations.add(operation);
                 button.classList.add('selected');
             }
         });
@@ -305,19 +305,22 @@ function initGame() {
     // Initialize start mixed button
     if (startMixedButton) {
         startMixedButton.addEventListener('click', () => {
-            if (!gameState.selectedOperation && gameState.selectedNumbers.size === 0) {
+            if (gameState.selectedOperations.size === 0 && gameState.selectedNumbers.size === 0) {
                 alert('Please select at least one operation and one number to practice!');
                 return;
             }
-            if (!gameState.selectedOperation) {
-                alert('Please select an operation to practice!');
+            if (gameState.selectedOperations.size === 0) {
+                alert('Please select at least one operation!');
                 return;
             }
             if (gameState.selectedNumbers.size === 0) {
-                alert('Please select at least one number to practice!');
+                alert('Please select at least one number!');
                 return;
             }
+            
             gameState.isMixedMode = true;
+            gameState.lastSelections.operations = new Set(gameState.selectedOperations);
+            gameState.lastSelections.numbers = new Set(gameState.selectedNumbers);
             startGame();
         });
     }
@@ -346,8 +349,10 @@ function initGame() {
         });
     });
     
+    // Initialize sound toggle
     initSoundToggle();
     
+    // Show selection screen
     showSelectionScreen();
 }
 
@@ -366,10 +371,11 @@ function showSelectionScreen() {
     showScreen('selection');
     
     // Restore previous selections if they exist
-    if (gameState.lastSelections.operation) {
-        gameState.selectedOperation = gameState.lastSelections.operation;
+    if (gameState.lastSelections.operations.size > 0) {
+        gameState.selectedOperations = new Set(gameState.lastSelections.operations);
         operationButtons.forEach(button => {
-            if (button.getAttribute('data-operation') === gameState.lastSelections.operation) {
+            const operation = button.getAttribute('data-operation');
+            if (gameState.lastSelections.operations.has(operation)) {
                 button.classList.add('selected');
             }
         });
@@ -391,23 +397,21 @@ function showSelectionScreen() {
 // Start the game
 function startGame() {
     // Save current selections before starting
-    gameState.lastSelections.operation = gameState.selectedOperation;
+    gameState.lastSelections.operations = new Set(gameState.selectedOperations);
     gameState.lastSelections.numbers = new Set(gameState.selectedNumbers);
     
     // Clear used questions for new game
     gameState.usedQuestions.clear();
     
-    gameState.score = 0;
-    gameState.questionsAnswered = 0;
-    gameState.questionsCorrect = 0;
-    gameState.isTransitioning = false;
+    // Reset game state
+    resetGame();
     
-    // Update displays
-    scoreDisplay.textContent = gameState.score;
-    updateQuestionProgress();
-    
+    // Show game screen
     showScreen('game');
+    
+    // Generate first question and start timer
     generateQuestion();
+    updateQuestionProgress();
     startTimer();
 }
 
@@ -418,16 +422,20 @@ function generateQuestion() {
     let questionKey;
     let attempts = 0;
     
-    if (gameState.usedQuestions.size >= GameLogic.calculateMaxQuestions(numbers, gameState.selectedOperation)) {
+    // Randomly select one of the chosen operations
+    const operations = Array.from(gameState.selectedOperations);
+    const currentOperation = operations[Math.floor(Math.random() * operations.length)];
+    
+    if (gameState.usedQuestions.size >= GameLogic.calculateMaxQuestions(numbers, currentOperation)) {
         gameState.usedQuestions.clear();
     }
     
     do {
-        if (gameState.selectedOperation === 'subtraction') {
+        if (currentOperation === 'subtraction') {
             num1 = numbers[Math.floor(Math.random() * numbers.length)];
             num2 = Math.floor(Math.random() * (num1 + 1));
             answer = num1 - num2;
-        } else if (gameState.selectedOperation === 'multiplication') {
+        } else if (currentOperation === 'multiplication') {
             const useSelectedFirst = Math.random() < 0.5;
             num1 = useSelectedFirst ? 
                 numbers[Math.floor(Math.random() * numbers.length)] : 
@@ -442,22 +450,22 @@ function generateQuestion() {
             answer = num1 + num2;
         }
         
-        questionKey = gameState.selectedOperation === 'multiplication' ?
-            [Math.min(num1, num2), Math.max(num1, num2), gameState.selectedOperation].join(',') :
-            [num1, num2, gameState.selectedOperation].join(',');
+        questionKey = currentOperation === 'multiplication' ?
+            [Math.min(num1, num2), Math.max(num1, num2), currentOperation].join(',') :
+            [num1, num2, currentOperation].join(',');
         
         attempts++;
     } while (gameState.usedQuestions.has(questionKey) && attempts < CONSTANTS.MAX_ATTEMPTS);
     
     gameState.usedQuestions.add(questionKey);
-    gameState.currentQuestion = { num1, num2, operation: gameState.selectedOperation };
+    gameState.currentQuestion = { num1, num2, operation: currentOperation };
     gameState.correctAnswer = answer;
     
-    const operationSymbol = GameLogic.getOperationSymbol(gameState.selectedOperation);
+    const operationSymbol = GameLogic.getOperationSymbol(currentOperation);
     questionDisplay.textContent = `${num1} ${operationSymbol} ${num2} = ?`;
     currentOperationDisplay.textContent = operationSymbol;
     
-    gameState.options = GameLogic.generateOptions(answer, gameState.selectedOperation);
+    gameState.options = GameLogic.generateOptions(answer, currentOperation);
     const shuffledOptions = [...gameState.options].sort(() => Math.random() - 0.5);
     answerButtons.forEach((button, index) => {
         button.textContent = shuffledOptions[index];
@@ -554,22 +562,30 @@ function checkAnswer(playerAnswer) {
         gameState.timerInterval = null;
     }
     
-    gameState.isTransitioning = true;
+    const isCorrect = playerAnswer === gameState.correctAnswer;
     
-    const isCorrect = parseInt(playerAnswer) === gameState.correctAnswer;
+    // Update button styles
+    answerButtons.forEach(button => {
+        const buttonAnswer = parseInt(button.textContent);
+        if (buttonAnswer === gameState.correctAnswer) {
+            button.classList.add('bg-green-200', 'text-white');
+        } else if (buttonAnswer === playerAnswer) {
+            button.classList.add('bg-red-500', 'text-white');
+        }
+    });
     
     if (isCorrect) {
         gameState.score += Math.ceil(gameState.timeRemaining);
         gameState.questionsCorrect++;
-        scoreDisplay.textContent = gameState.score;
         playSoundSafely(correctSound);
-        
         UIManager.updateFeedback('Correct!');
+        createConfetti(20);
     } else {
         playSoundSafely(wrongSound);
-        
-        UIManager.updateFeedback(`Wrong! The answer was ${gameState.correctAnswer}`, true);
+        UIManager.updateFeedback('Wrong!', true);
     }
+    
+    gameState.isTransitioning = true;
     
     const timeout = setTimeout(() => {
         if (gameState.questionsAnswered < gameState.totalQuestions - 1) {
