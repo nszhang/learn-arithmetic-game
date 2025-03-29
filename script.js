@@ -311,6 +311,11 @@ function generateQuestion() {
     let attempts = 0;
     const maxAttempts = 100; // Prevent infinite loop
     
+    // If we've used all possible questions, clear the used questions set
+    if (gameState.usedQuestions.size >= getMaxPossibleQuestions()) {
+        gameState.usedQuestions.clear();
+    }
+    
     do {
         if (gameState.selectedOperation === 'subtraction') {
             // For subtraction, use one of the selected numbers as minuend
@@ -348,12 +353,11 @@ function generateQuestion() {
         
         attempts++;
         // If we've tried too many times to find a unique question,
-        // clear the used questions set and start over
+        // break the loop and use the current question
         if (attempts >= maxAttempts) {
-            gameState.usedQuestions.clear();
-            attempts = 0;
+            break;
         }
-    } while (gameState.usedQuestions.has(questionKey) && gameState.usedQuestions.size < getMaxPossibleQuestions());
+    } while (gameState.usedQuestions.has(questionKey));
     
     // Add this question to used questions
     gameState.usedQuestions.add(questionKey);
@@ -585,25 +589,26 @@ function createConfetti(count) {
 
 // Complete game reset function
 function resetGame() {
-    // Clear all intervals and timeouts
-    if (gameState.timerInterval) {
-        clearInterval(gameState.timerInterval);
-    }
-    
-    gameState.pendingTimeouts.forEach(timeout => clearTimeout(timeout));
-    gameState.pendingTimeouts = [];
-    
     // Reset game state
     gameState.score = 0;
     gameState.questionsAnswered = 0;
     gameState.questionsCorrect = 0;
+    gameState.currentQuestion = null;
+    gameState.correctAnswer = null;
+    gameState.options = [];
+    gameState.timeRemaining = gameState.timeLimit;
     gameState.isTransitioning = false;
+    gameState.usedQuestions.clear(); // Clear used questions when resetting game
     
-    // Reset UI elements
-    if (scoreDisplay) scoreDisplay.textContent = '0';
-    if (timerDisplay) timerDisplay.textContent = gameState.timeLimit;
-    if (timerBar) timerBar.style.width = '100%';
-    if (feedbackDisplay) feedbackDisplay.classList.add('hidden');
+    // Clear any pending timeouts
+    gameState.pendingTimeouts.forEach(timeout => clearTimeout(timeout));
+    gameState.pendingTimeouts = [];
+    
+    // Clear timer interval
+    if (gameState.timerInterval) {
+        clearInterval(gameState.timerInterval);
+        gameState.timerInterval = null;
+    }
 }
 
 // Initialize the game when the DOM is loaded
