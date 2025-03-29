@@ -475,13 +475,25 @@ function startTimer() {
     gameState.timeRemaining = gameState.timeLimit;
     UIManager.updateTimer(gameState.timeLimit, totalTime);
     
+    // Clear any existing timer
     if (gameState.timerInterval) {
         clearInterval(gameState.timerInterval);
+        gameState.timerInterval = null;
     }
+    
+    // Don't start a new timer if we're transitioning
+    if (gameState.isTransitioning) return;
     
     const startTime = Date.now();
     
     gameState.timerInterval = setInterval(() => {
+        // Check if we're transitioning before processing timer update
+        if (gameState.isTransitioning) {
+            clearInterval(gameState.timerInterval);
+            gameState.timerInterval = null;
+            return;
+        }
+        
         const elapsed = Date.now() - startTime;
         const remaining = totalTime - elapsed;
         
