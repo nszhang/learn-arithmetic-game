@@ -472,6 +472,13 @@ function timeUp() {
     
     playSoundSafely(wrongSound);
     
+    // Find and highlight the correct answer button
+    answerButtons.forEach(button => {
+        if (button.textContent.trim() === gameState.correctAnswer.toString()) {
+            button.classList.add('bg-green-500', 'text-white');
+        }
+    });
+    
     if (feedbackDisplay) {
         feedbackDisplay.textContent = 'Time\'s up!';
         feedbackDisplay.className = 'text-center text-lg font-bold mb-4 text-red-600';
@@ -482,6 +489,10 @@ function timeUp() {
     
     setTimeout(() => {
         if (gameState.questionsAnswered < gameState.totalQuestions - 1) {
+            // Reset button styles
+            answerButtons.forEach(button => {
+                button.classList.remove('bg-green-500', 'text-white');
+            });
             gameState.questionsAnswered++;
             updateQuestionProgress();
             generateQuestion();
@@ -493,7 +504,7 @@ function timeUp() {
             showResults();
         }
         gameState.isTransitioning = false;
-    }, 1500);
+    }, 2000);
 }
 
 // Check the player's answer
