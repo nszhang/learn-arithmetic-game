@@ -1,21 +1,9 @@
 // Learn Arithmetic Game
 
-// Constants
-const CONSTANTS = {
-    ANSWER_OPTIONS: 4,
-    MIN_MULTIPLIER: 1,
-    MAX_MULTIPLIER: 12,
-    TIMER_INTERVAL: 100,
-    TRANSITION_DELAY: 2000,
-    LOW_TIME_THRESHOLD: 3,
-    MAX_ATTEMPTS: 100,
-    OPERATIONS: ['addition', 'subtraction', 'multiplication']
-};
-
 // Game state
 const gameState = {
     currentScreen: 'selection',
-    selectedOperations: new Set(),
+    selectedOperation: null,  // Keep single operation for now
     selectedNumbers: new Set(),
     isMixedMode: false,
     score: 0,
@@ -33,10 +21,20 @@ const gameState = {
     soundEnabled: true,
     pendingTimeouts: [],
     lastSelections: {
-        operations: new Set(),
+        operation: null,  // Keep single operation for now
         numbers: new Set()
     },
     usedQuestions: new Set()
+};
+
+// Constants
+const CONSTANTS = {
+    TIMER_INTERVAL: 100,
+    LOW_TIME_THRESHOLD: 3,
+    TRANSITION_DELAY: 1500,
+    ANSWER_OPTIONS: 4,
+    MIN_MULTIPLIER: 1,
+    MAX_MULTIPLIER: 12
 };
 
 // DOM Elements
@@ -75,88 +73,36 @@ const soundToggleButton = document.getElementById('sound-toggle');
 const soundOnIcon = document.getElementById('sound-on-icon');
 const soundOffIcon = document.getElementById('sound-off-icon');
 
-// UI Utility Class
-class UIManager {
-    static updateButtonStyle(button, isSelected, selectedClass = 'selected') {
-        button.classList.toggle(selectedClass, isSelected);
-    }
-
-    static updateFeedback(message, isError = false) {
+// UI Manager class
+const UIManager = {
+    resetAnswerButtons() {
+        answerButtons.forEach(button => {
+            button.className = 'answer-btn bg-white hover:bg-blue-100 text-blue-700 font-semibold py-3 px-6 border border-blue-500 rounded-lg shadow-md transition duration-200 transform hover:scale-105 active:scale-95';
+        });
+    },
+    
+    highlightCorrectAnswer(correctAnswer) {
+        answerButtons.forEach(button => {
+            if (parseInt(button.textContent) === correctAnswer) {
+                button.classList.add('bg-green-200', 'text-green-800');
+            }
+        });
+    },
+    
+    updateFeedback(message, isError = false) {
         if (feedbackDisplay) {
             feedbackDisplay.textContent = message;
             feedbackDisplay.className = `text-center text-lg font-bold mb-4 ${isError ? 'text-red-600' : 'text-green-600'}`;
             feedbackDisplay.classList.remove('hidden');
         }
-    }
-
-    static hideFeedback() {
+    },
+    
+    hideFeedback() {
         if (feedbackDisplay) {
             feedbackDisplay.classList.add('hidden');
         }
     }
-
-    static highlightCorrectAnswer(correctAnswer, highlightClass = 'bg-green-500') {
-        answerButtons.forEach(button => {
-            if (button.textContent.trim() === correctAnswer.toString()) {
-                button.classList.add(highlightClass, 'text-white');
-            }
-        });
-    }
-
-    static resetAnswerButtons() {
-        answerButtons.forEach(button => {
-            button.classList.remove('bg-green-200', 'bg-red-500', 'text-white');
-        });
-    }
-
-    static updateTimer(timeRemaining, totalTime) {
-        if (timerDisplay) {
-            timerDisplay.textContent = timeRemaining;
-        }
-        if (timerBar) {
-            timerBar.style.width = `${(timeRemaining * 1000 / totalTime) * 100}%`;
-        }
-    }
-}
-
-// Game Logic Class
-class GameLogic {
-    static generateOptions(correctAnswer, operation) {
-        const options = new Set([correctAnswer]);
-        while (options.size < CONSTANTS.ANSWER_OPTIONS) {
-            let wrongAnswer;
-            const variation = (Math.random() < 0.5 ? 1 : -1) * (1 + Math.floor(Math.random() * 3));
-            
-            if (operation === 'multiplication') {
-                wrongAnswer = correctAnswer + variation * (1 + Math.floor(Math.random() * (correctAnswer / 2)));
-            } else {
-                wrongAnswer = correctAnswer + variation;
-            }
-            
-            if (wrongAnswer >= 0) {
-                options.add(wrongAnswer);
-            }
-        }
-        return Array.from(options).sort((a, b) => a - b);
-    }
-
-    static getOperationSymbol(operation) {
-        return {
-            'addition': '+',
-            'subtraction': '−',
-            'multiplication': '×'
-        }[operation];
-    }
-
-    static calculateMaxQuestions(numbers, operation) {
-        if (operation === 'multiplication') {
-            return numbers.length * CONSTANTS.MAX_MULTIPLIER;
-        } else if (operation === 'subtraction') {
-            return numbers.reduce((total, n) => total + n + 1, 0);
-        }
-        return numbers.length * numbers.length;
-    }
-}
+};
 
 // Helper function for safe audio playback
 function playSoundSafely(audioElement) {
@@ -228,20 +174,6 @@ function stopGame() {
     gameState.pendingTimeouts.forEach(timeout => clearTimeout(timeout));
     gameState.pendingTimeouts = [];
 
-    // Remove all confetti elements
-    const confettiElements = document.querySelectorAll('.confetti');
-    confettiElements.forEach(element => {
-        if (element.parentNode) {
-            element.parentNode.removeChild(element);
-        }
-    });
-
-    // Hide feedback
-    UIManager.hideFeedback();
-
-    // Reset button styles
-    UIManager.resetAnswerButtons();
-
     // Reset game state
     resetGame();
 
@@ -278,11 +210,12 @@ function initGame() {
     operationButtons.forEach(button => {
         button.addEventListener('click', () => {
             const operation = button.getAttribute('data-operation');
-            if (gameState.selectedOperations.has(operation)) {
-                gameState.selectedOperations.delete(operation);
+            if (gameState.selectedOperation === operation) {
+                gameState.selectedOperation = null;
                 button.classList.remove('selected');
             } else {
-                gameState.selectedOperations.add(operation);
+                operationButtons.forEach(b => b.classList.remove('selected'));
+                gameState.selectedOperation = operation;
                 button.classList.add('selected');
             }
         });
@@ -305,22 +238,20 @@ function initGame() {
     // Initialize start mixed button
     if (startMixedButton) {
         startMixedButton.addEventListener('click', () => {
-            if (gameState.selectedOperations.size === 0 && gameState.selectedNumbers.size === 0) {
+            if (!gameState.selectedOperation && gameState.selectedNumbers.size === 0) {
                 alert('Please select at least one operation and one number to practice!');
                 return;
             }
-            if (gameState.selectedOperations.size === 0) {
-                alert('Please select at least one operation!');
+            if (!gameState.selectedOperation) {
+                alert('Please select an operation to practice!');
                 return;
             }
             if (gameState.selectedNumbers.size === 0) {
-                alert('Please select at least one number!');
+                alert('Please select at least one number to practice!');
                 return;
             }
             
             gameState.isMixedMode = true;
-            gameState.lastSelections.operations = new Set(gameState.selectedOperations);
-            gameState.lastSelections.numbers = new Set(gameState.selectedNumbers);
             startGame();
         });
     }
@@ -349,10 +280,8 @@ function initGame() {
         });
     });
     
-    // Initialize sound toggle
     initSoundToggle();
     
-    // Show selection screen
     showSelectionScreen();
 }
 
@@ -371,11 +300,11 @@ function showSelectionScreen() {
     showScreen('selection');
     
     // Restore previous selections if they exist
-    if (gameState.lastSelections.operations.size > 0) {
-        gameState.selectedOperations = new Set(gameState.lastSelections.operations);
+    if (gameState.lastSelections.operation) {
+        gameState.selectedOperation = gameState.lastSelections.operation;
         operationButtons.forEach(button => {
             const operation = button.getAttribute('data-operation');
-            if (gameState.lastSelections.operations.has(operation)) {
+            if (gameState.lastSelections.operation === operation) {
                 button.classList.add('selected');
             }
         });
@@ -397,21 +326,23 @@ function showSelectionScreen() {
 // Start the game
 function startGame() {
     // Save current selections before starting
-    gameState.lastSelections.operations = new Set(gameState.selectedOperations);
+    gameState.lastSelections.operation = gameState.selectedOperation;
     gameState.lastSelections.numbers = new Set(gameState.selectedNumbers);
     
     // Clear used questions for new game
     gameState.usedQuestions.clear();
     
-    // Reset game state
-    resetGame();
+    gameState.score = 0;
+    gameState.questionsAnswered = 0;
+    gameState.questionsCorrect = 0;
+    gameState.isTransitioning = false;
     
-    // Show game screen
-    showScreen('game');
-    
-    // Generate first question and start timer
-    generateQuestion();
+    // Update displays
+    scoreDisplay.textContent = gameState.score;
     updateQuestionProgress();
+    
+    showScreen('game');
+    generateQuestion();
     startTimer();
 }
 
@@ -422,20 +353,16 @@ function generateQuestion() {
     let questionKey;
     let attempts = 0;
     
-    // Randomly select one of the chosen operations
-    const operations = Array.from(gameState.selectedOperations);
-    const currentOperation = operations[Math.floor(Math.random() * operations.length)];
-    
-    if (gameState.usedQuestions.size >= GameLogic.calculateMaxQuestions(numbers, currentOperation)) {
+    if (gameState.usedQuestions.size >= getMaxPossibleQuestions()) {
         gameState.usedQuestions.clear();
     }
     
     do {
-        if (currentOperation === 'subtraction') {
+        if (gameState.selectedOperation === 'subtraction') {
             num1 = numbers[Math.floor(Math.random() * numbers.length)];
             num2 = Math.floor(Math.random() * (num1 + 1));
             answer = num1 - num2;
-        } else if (currentOperation === 'multiplication') {
+        } else if (gameState.selectedOperation === 'multiplication') {
             const useSelectedFirst = Math.random() < 0.5;
             num1 = useSelectedFirst ? 
                 numbers[Math.floor(Math.random() * numbers.length)] : 
@@ -450,26 +377,71 @@ function generateQuestion() {
             answer = num1 + num2;
         }
         
-        questionKey = currentOperation === 'multiplication' ?
-            [Math.min(num1, num2), Math.max(num1, num2), currentOperation].join(',') :
-            [num1, num2, currentOperation].join(',');
+        questionKey = gameState.selectedOperation === 'multiplication' ?
+            [Math.min(num1, num2), Math.max(num1, num2), gameState.selectedOperation].join(',') :
+            [num1, num2, gameState.selectedOperation].join(',');
         
         attempts++;
     } while (gameState.usedQuestions.has(questionKey) && attempts < CONSTANTS.MAX_ATTEMPTS);
     
     gameState.usedQuestions.add(questionKey);
-    gameState.currentQuestion = { num1, num2, operation: currentOperation };
+    gameState.currentQuestion = { num1, num2, operation: gameState.selectedOperation };
     gameState.correctAnswer = answer;
     
-    const operationSymbol = GameLogic.getOperationSymbol(currentOperation);
+    // Generate options
+    const options = new Set([answer]);
+    while (options.size < CONSTANTS.ANSWER_OPTIONS) {
+        let wrongAnswer;
+        if (gameState.selectedOperation === 'addition') {
+            wrongAnswer = answer + (Math.random() < 0.5 ? 1 : -1) * (1 + Math.floor(Math.random() * 3));
+        } else if (gameState.selectedOperation === 'subtraction') {
+            wrongAnswer = answer + (Math.random() < 0.5 ? 1 : -1) * (1 + Math.floor(Math.random() * 3));
+        } else { // multiplication
+            wrongAnswer = answer + (Math.random() < 0.5 ? 1 : -1) * (1 + Math.floor(Math.random() * (answer / 2)));
+        }
+        if (wrongAnswer >= 0) {
+            options.add(wrongAnswer);
+        }
+    }
+    
+    gameState.options = Array.from(options).sort((a, b) => a - b);
+    
+    const operationSymbol = {
+        'addition': '+',
+        'subtraction': '−',
+        'multiplication': '×'
+    }[gameState.selectedOperation];
+    
     questionDisplay.textContent = `${num1} ${operationSymbol} ${num2} = ?`;
     currentOperationDisplay.textContent = operationSymbol;
     
-    gameState.options = GameLogic.generateOptions(answer, currentOperation);
+    // Update answer buttons
     const shuffledOptions = [...gameState.options].sort(() => Math.random() - 0.5);
     answerButtons.forEach((button, index) => {
         button.textContent = shuffledOptions[index];
+        button.className = 'answer-btn bg-white hover:bg-blue-100 text-blue-700 font-semibold py-3 px-6 border border-blue-500 rounded-lg shadow-md transition duration-200 transform hover:scale-105 active:scale-95';
     });
+}
+
+// Helper function to calculate maximum possible unique questions
+function getMaxPossibleQuestions() {
+    const numbers = Array.from(gameState.selectedNumbers);
+    const currentOperation = gameState.selectedOperation;
+    
+    if (currentOperation === 'multiplication') {
+        // For multiplication, each selected number can be paired with numbers 1-12
+        return numbers.length * CONSTANTS.MAX_MULTIPLIER;
+    } else if (currentOperation === 'subtraction') {
+        // For subtraction, each selected number can be paired with numbers 0 to itself
+        let total = 0;
+        numbers.forEach(n => {
+            total += n + 1; // +1 because we include 0
+        });
+        return total;
+    } else { // addition
+        // For addition, it's the number of possible combinations of selected numbers
+        return numbers.length * numbers.length;
+    }
 }
 
 // Update the question progress display
@@ -479,9 +451,11 @@ function updateQuestionProgress() {
 
 // Start the timer
 function startTimer() {
+    // Don't start a new timer if we're transitioning
+    if (gameState.isTransitioning) return;
+
     const totalTime = gameState.timeLimit * 1000;
     gameState.timeRemaining = gameState.timeLimit;
-    UIManager.updateTimer(gameState.timeLimit, totalTime);
     
     // Clear any existing timer
     if (gameState.timerInterval) {
@@ -489,29 +463,22 @@ function startTimer() {
         gameState.timerInterval = null;
     }
     
-    // Don't start a new timer if we're transitioning
-    if (gameState.isTransitioning) return;
-    
     const startTime = Date.now();
+    updateTimer(gameState.timeLimit, totalTime);
     
     gameState.timerInterval = setInterval(() => {
-        // Check if we're transitioning before processing timer update
-        if (gameState.isTransitioning) {
-            clearInterval(gameState.timerInterval);
-            gameState.timerInterval = null;
-            return;
-        }
-        
         const elapsed = Date.now() - startTime;
         const remaining = totalTime - elapsed;
+        const seconds = Math.ceil(remaining / 1000);
         
         if (remaining <= 0) {
+            clearInterval(gameState.timerInterval);
+            gameState.timerInterval = null;
             timeUp();
         } else {
-            const seconds = Math.ceil(remaining / 1000);
             if (seconds !== gameState.timeRemaining) {
                 gameState.timeRemaining = seconds;
-                UIManager.updateTimer(seconds, totalTime);
+                updateTimer(seconds, totalTime);
                 if (seconds <= CONSTANTS.LOW_TIME_THRESHOLD) {
                     playSoundSafely(timerTickSound);
                 }
@@ -520,33 +487,67 @@ function startTimer() {
     }, CONSTANTS.TIMER_INTERVAL);
 }
 
+// Update timer display and bar
+function updateTimer(timeRemaining, totalTime) {
+    if (timerDisplay) {
+        timerDisplay.textContent = timeRemaining;
+    }
+    if (timerBar) {
+        const percentage = Math.max(0, Math.min(100, (timeRemaining / (totalTime / 1000)) * 100));
+        timerBar.style.width = `${percentage}%`;
+        
+        // Update color based on time remaining
+        if (timeRemaining <= CONSTANTS.LOW_TIME_THRESHOLD) {
+            timerBar.classList.add('bg-red-500');
+            timerBar.classList.remove('bg-blue-500');
+        } else {
+            timerBar.classList.add('bg-blue-500');
+            timerBar.classList.remove('bg-red-500');
+        }
+    }
+}
+
 // Handle time's up
 function timeUp() {
     if (gameState.isTransitioning) return;
-
+    
+    gameState.isTransitioning = true;
+    
+    // Clear and nullify timer
     if (gameState.timerInterval) {
         clearInterval(gameState.timerInterval);
         gameState.timerInterval = null;
     }
     
     playSoundSafely(wrongSound);
-    UIManager.highlightCorrectAnswer(gameState.correctAnswer);
-    UIManager.updateFeedback('Time\'s up!', true);
     
-    gameState.isTransitioning = true;
+    // Show correct answer
+    answerButtons.forEach(button => {
+        const buttonAnswer = parseInt(button.textContent);
+        if (buttonAnswer === gameState.correctAnswer) {
+            button.className = 'answer-btn bg-green-200 text-green-800 font-semibold py-3 px-6 border border-green-500 rounded-lg shadow-md transition duration-200';
+        }
+    });
+    
+    if (feedbackDisplay) {
+        feedbackDisplay.textContent = 'Time\'s up!';
+        feedbackDisplay.className = 'text-center text-lg font-bold mb-4 text-red-600';
+        feedbackDisplay.classList.remove('hidden');
+    }
     
     const timeout = setTimeout(() => {
         if (gameState.questionsAnswered < gameState.totalQuestions - 1) {
-            UIManager.resetAnswerButtons();
             gameState.questionsAnswered++;
             updateQuestionProgress();
             generateQuestion();
-            startTimer();
-            UIManager.hideFeedback();
+            gameState.isTransitioning = false;  // Clear transition state before starting timer
+            startTimer();  // Start timer for next question
+            if (feedbackDisplay) {
+                feedbackDisplay.classList.add('hidden');
+            }
         } else {
             showResults();
         }
-        gameState.isTransitioning = false;
     }, CONSTANTS.TRANSITION_DELAY);
     
     // Track the timeout
@@ -556,7 +557,10 @@ function timeUp() {
 // Check the player's answer
 function checkAnswer(playerAnswer) {
     if (gameState.isTransitioning) return;
-
+    
+    gameState.isTransitioning = true;
+    
+    // Clear and nullify timer
     if (gameState.timerInterval) {
         clearInterval(gameState.timerInterval);
         gameState.timerInterval = null;
@@ -568,37 +572,46 @@ function checkAnswer(playerAnswer) {
     answerButtons.forEach(button => {
         const buttonAnswer = parseInt(button.textContent);
         if (buttonAnswer === gameState.correctAnswer) {
-            button.classList.add('bg-green-200', 'text-white');
-        } else if (buttonAnswer === playerAnswer) {
-            button.classList.add('bg-red-500', 'text-white');
+            button.className = 'answer-btn bg-green-200 text-green-800 font-semibold py-3 px-6 border border-green-500 rounded-lg shadow-md transition duration-200';
+        } else if (buttonAnswer === playerAnswer && !isCorrect) {
+            button.className = 'answer-btn bg-red-500 text-white font-semibold py-3 px-6 border border-red-600 rounded-lg shadow-md transition duration-200';
         }
     });
     
     if (isCorrect) {
         gameState.score += Math.ceil(gameState.timeRemaining);
         gameState.questionsCorrect++;
+        scoreDisplay.textContent = gameState.score;
         playSoundSafely(correctSound);
-        UIManager.updateFeedback('Correct!');
-        createConfetti(20);
+        
+        if (feedbackDisplay) {
+            feedbackDisplay.textContent = 'Correct!';
+            feedbackDisplay.className = 'text-center text-lg font-bold mb-4 text-green-600';
+            feedbackDisplay.classList.remove('hidden');
+        }
     } else {
         playSoundSafely(wrongSound);
-        UIManager.updateFeedback('Wrong!', true);
+        
+        if (feedbackDisplay) {
+            feedbackDisplay.textContent = `Wrong! The answer was ${gameState.correctAnswer}`;
+            feedbackDisplay.className = 'text-center text-lg font-bold mb-4 text-red-600';
+            feedbackDisplay.classList.remove('hidden');
+        }
     }
-    
-    gameState.isTransitioning = true;
     
     const timeout = setTimeout(() => {
         if (gameState.questionsAnswered < gameState.totalQuestions - 1) {
-            UIManager.resetAnswerButtons();
             gameState.questionsAnswered++;
             updateQuestionProgress();
             generateQuestion();
-            startTimer();
-            UIManager.hideFeedback();
+            gameState.isTransitioning = false;  // Clear transition state before starting timer
+            startTimer();  // Start timer for next question
+            if (feedbackDisplay) {
+                feedbackDisplay.classList.add('hidden');
+            }
         } else {
             showResults();
         }
-        gameState.isTransitioning = false;
     }, CONSTANTS.TRANSITION_DELAY);
     
     // Track the timeout
@@ -609,16 +622,15 @@ function checkAnswer(playerAnswer) {
 function showResults() {
     showScreen('results');
     
-    const accuracy = (gameState.questionsCorrect / gameState.totalQuestions) * 100;
-    const message = `
-        <p class="text-xl mb-4">Final Score: <span class="font-bold text-green-600">${gameState.score}</span></p>
-        <p class="text-lg mb-2">Questions Correct: <span class="font-bold text-blue-600">${gameState.questionsCorrect}/${gameState.totalQuestions}</span></p>
-        <p class="text-lg mb-4">Accuracy: <span class="font-bold text-purple-600">${accuracy.toFixed(1)}%</span></p>
-    `;
+    const accuracy = Math.round((gameState.questionsCorrect / gameState.totalQuestions) * 100);
+    const timeBonus = Math.round(gameState.score / gameState.totalQuestions);
     
-    if (resultsContent) {
-        resultsContent.innerHTML = message;
-    }
+    resultsContent.innerHTML = `
+        <div class="text-2xl font-bold mb-4">Game Over!</div>
+        <div class="text-xl mb-2">Score: ${gameState.score}</div>
+        <div class="text-lg mb-2">Accuracy: ${accuracy}%</div>
+        <div class="text-lg mb-4">Average Time Bonus: ${timeBonus}</div>
+    `;
     
     if (accuracy >= 80) {
         createConfetti(100);
@@ -638,13 +650,12 @@ function createConfetti(count) {
         confetti.style.opacity = Math.random();
         document.body.appendChild(confetti);
         
-        // Remove confetti after animation and track the timeout
-        const timeout = setTimeout(() => {
+        // Remove confetti after animation
+        setTimeout(() => {
             if (confetti.parentNode) {
                 confetti.parentNode.removeChild(confetti);
             }
         }, 5000);
-        gameState.pendingTimeouts.push(timeout);
     }
 }
 
@@ -657,18 +668,33 @@ function resetGame() {
     gameState.currentQuestion = null;
     gameState.correctAnswer = null;
     gameState.options = [];
-    gameState.timeRemaining = gameState.timeLimit;
     gameState.isTransitioning = false;
-    gameState.usedQuestions.clear(); // Clear used questions when resetting game
+    gameState.timeRemaining = gameState.timeLimit;
     
-    // Clear any pending timeouts
-    gameState.pendingTimeouts.forEach(timeout => clearTimeout(timeout));
-    gameState.pendingTimeouts = [];
-    
-    // Clear timer interval
+    // Clear any existing timer
     if (gameState.timerInterval) {
         clearInterval(gameState.timerInterval);
         gameState.timerInterval = null;
+    }
+    
+    // Clear any pending timeouts
+    while (gameState.pendingTimeouts.length > 0) {
+        clearTimeout(gameState.pendingTimeouts.pop());
+    }
+    
+    // Reset displays
+    scoreDisplay.textContent = '0';
+    UIManager.resetAnswerButtons();
+    UIManager.hideFeedback();
+    
+    // Reset timer display
+    if (timerDisplay) {
+        timerDisplay.textContent = gameState.timeLimit;
+    }
+    if (timerBar) {
+        timerBar.style.width = '100%';
+        timerBar.classList.remove('bg-red-500');
+        timerBar.classList.add('bg-blue-500');
     }
 }
 
