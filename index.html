@@ -123,7 +123,7 @@
                     </div>
                     <div class="bg-red-100 px-4 py-2 rounded-lg">
                         <span class="text-red-700 font-bold">Time: </span>
-                        <span id="timer" class="text-red-700">10</span>s
+                        <span id="timer" class="text-red-700">10</span>
                     </div>
                 </div>
                 
@@ -138,14 +138,20 @@
                     </div>
                 </div>
                 
-                <div class="grid grid-cols-2 gap-4 mb-6">
-                    <button class="answer-btn bg-white hover:bg-blue-50 border-2 border-blue-200 p-4 rounded-lg text-2xl font-bold text-blue-700"></button>
-                    <button class="answer-btn bg-white hover:bg-blue-50 border-2 border-blue-200 p-4 rounded-lg text-2xl font-bold text-blue-700"></button>
-                    <button class="answer-btn bg-white hover:bg-blue-50 border-2 border-blue-200 p-4 rounded-lg text-2xl font-bold text-blue-700"></button>
-                    <button class="answer-btn bg-white hover:bg-blue-50 border-2 border-blue-200 p-4 rounded-lg text-2xl font-bold text-blue-700"></button>
+                <div class="grid grid-cols-2 gap-4 mb-8">
+                    <button class="answer-btn bg-white border-2 border-blue-300 hover:border-blue-500 p-4 rounded-lg text-xl font-bold text-blue-700"></button>
+                    <button class="answer-btn bg-white border-2 border-blue-300 hover:border-blue-500 p-4 rounded-lg text-xl font-bold text-blue-700"></button>
+                    <button class="answer-btn bg-white border-2 border-blue-300 hover:border-blue-500 p-4 rounded-lg text-xl font-bold text-blue-700"></button>
+                    <button class="answer-btn bg-white border-2 border-blue-300 hover:border-blue-500 p-4 rounded-lg text-xl font-bold text-blue-700"></button>
                 </div>
                 
                 <div id="feedback" class="text-center text-lg font-bold mb-4 hidden"></div>
+                
+                <div class="text-center">
+                    <button id="back-to-menu" class="bg-gray-500 hover:bg-gray-600 text-white font-bold py-3 px-6 rounded-lg shadow-md">
+                        Back to Menu
+                    </button>
+                </div>
             </div>
             
             <!-- Results Screen -->

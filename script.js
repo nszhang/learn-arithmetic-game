@@ -53,6 +53,7 @@ const feedbackDisplay = document.getElementById('feedback');
 const resultsContent = document.getElementById('results-content');
 const practiceAgainButton = document.getElementById('practice-again');
 const returnToMenuButton = document.getElementById('return-to-menu');
+const backToMenuButton = document.getElementById('back-to-menu');
 
 // Audio elements
 const correctSound = document.getElementById('correct-sound');
@@ -171,6 +172,31 @@ function initSoundToggle() {
     }
 }
 
+// Function to stop the game and return to menu
+function stopGame() {
+    // Set transitioning flag to prevent further game actions
+    gameState.isTransitioning = true;
+
+    // Clear the timer if it's running
+    if (gameState.timerInterval) {
+        clearInterval(gameState.timerInterval);
+        gameState.timerInterval = null;
+    }
+
+    // Clear any pending timeouts
+    gameState.pendingTimeouts.forEach(timeout => clearTimeout(timeout));
+    gameState.pendingTimeouts = [];
+
+    // Reset game state
+    resetGame();
+
+    // Reset transitioning flag
+    gameState.isTransitioning = false;
+
+    // Show selection screen
+    showSelectionScreen();
+}
+
 // Initialize the game
 function initGame() {
     // Initialize audio and sound toggle
@@ -190,6 +216,11 @@ function initGame() {
             gameState.timeLimit = parseInt(timeLimitSlider.value);
             timeLimitDisplay.textContent = timeLimitSlider.value;
         });
+    }
+
+    // Initialize back to menu button
+    if (backToMenuButton) {
+        backToMenuButton.addEventListener('click', stopGame);
     }
     
     // Initialize operation buttons
@@ -485,6 +516,8 @@ function startTimer() {
 
 // Handle time's up
 function timeUp() {
+    if (gameState.isTransitioning) return;
+
     if (gameState.timerInterval) {
         clearInterval(gameState.timerInterval);
     }
@@ -517,6 +550,8 @@ function timeUp() {
 
 // Check the player's answer
 function checkAnswer(playerAnswer) {
+    if (gameState.isTransitioning) return;
+
     if (gameState.timerInterval) {
         clearInterval(gameState.timerInterval);
     }
