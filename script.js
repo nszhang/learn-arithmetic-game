@@ -1,5 +1,16 @@
 // Learn Arithmetic Game
 
+// Constants
+const CONSTANTS = {
+    ANSWER_OPTIONS: 4,
+    MIN_MULTIPLIER: 1,
+    MAX_MULTIPLIER: 12,
+    TIMER_INTERVAL: 100,
+    TRANSITION_DELAY: 2000,
+    LOW_TIME_THRESHOLD: 3,
+    MAX_ATTEMPTS: 100
+};
+
 // Game state
 const gameState = {
     currentScreen: 'selection',
@@ -62,6 +73,89 @@ const timerTickSound = document.getElementById('timer-tick');
 const soundToggleButton = document.getElementById('sound-toggle');
 const soundOnIcon = document.getElementById('sound-on-icon');
 const soundOffIcon = document.getElementById('sound-off-icon');
+
+// UI Utility Class
+class UIManager {
+    static updateButtonStyle(button, isSelected, selectedClass = 'selected') {
+        button.classList.toggle(selectedClass, isSelected);
+    }
+
+    static updateFeedback(message, isError = false) {
+        if (feedbackDisplay) {
+            feedbackDisplay.textContent = message;
+            feedbackDisplay.className = `text-center text-lg font-bold mb-4 ${isError ? 'text-red-600' : 'text-green-600'}`;
+            feedbackDisplay.classList.remove('hidden');
+        }
+    }
+
+    static hideFeedback() {
+        if (feedbackDisplay) {
+            feedbackDisplay.classList.add('hidden');
+        }
+    }
+
+    static highlightCorrectAnswer(correctAnswer, highlightClass = 'bg-green-500') {
+        answerButtons.forEach(button => {
+            if (button.textContent.trim() === correctAnswer.toString()) {
+                button.classList.add(highlightClass, 'text-white');
+            }
+        });
+    }
+
+    static resetAnswerButtons() {
+        answerButtons.forEach(button => {
+            button.classList.remove('bg-green-500', 'bg-red-500', 'text-white');
+        });
+    }
+
+    static updateTimer(timeRemaining, totalTime) {
+        if (timerDisplay) {
+            timerDisplay.textContent = timeRemaining;
+        }
+        if (timerBar) {
+            timerBar.style.width = `${(timeRemaining * 1000 / totalTime) * 100}%`;
+        }
+    }
+}
+
+// Game Logic Class
+class GameLogic {
+    static generateOptions(correctAnswer, operation) {
+        const options = new Set([correctAnswer]);
+        while (options.size < CONSTANTS.ANSWER_OPTIONS) {
+            let wrongAnswer;
+            const variation = (Math.random() < 0.5 ? 1 : -1) * (1 + Math.floor(Math.random() * 3));
+            
+            if (operation === 'multiplication') {
+                wrongAnswer = correctAnswer + variation * (1 + Math.floor(Math.random() * (correctAnswer / 2)));
+            } else {
+                wrongAnswer = correctAnswer + variation;
+            }
+            
+            if (wrongAnswer >= 0) {
+                options.add(wrongAnswer);
+            }
+        }
+        return Array.from(options).sort((a, b) => a - b);
+    }
+
+    static getOperationSymbol(operation) {
+        return {
+            'addition': '+',
+            'subtraction': '−',
+            'multiplication': '×'
+        }[operation];
+    }
+
+    static calculateMaxQuestions(numbers, operation) {
+        if (operation === 'multiplication') {
+            return numbers.length * CONSTANTS.MAX_MULTIPLIER;
+        } else if (operation === 'subtraction') {
+            return numbers.reduce((total, n) => total + n + 1, 0);
+        }
+        return numbers.length * numbers.length;
+    }
+}
 
 // Helper function for safe audio playback
 function playSoundSafely(audioElement) {
@@ -132,6 +226,20 @@ function stopGame() {
     // Clear any pending timeouts
     gameState.pendingTimeouts.forEach(timeout => clearTimeout(timeout));
     gameState.pendingTimeouts = [];
+
+    // Remove all confetti elements
+    const confettiElements = document.querySelectorAll('.confetti');
+    confettiElements.forEach(element => {
+        if (element.parentNode) {
+            element.parentNode.removeChild(element);
+        }
+    });
+
+    // Hide feedback
+    UIManager.hideFeedback();
+
+    // Reset button styles
+    UIManager.resetAnswerButtons();
 
     // Reset game state
     resetGame();
@@ -309,119 +417,51 @@ function generateQuestion() {
     let num1, num2, answer;
     let questionKey;
     let attempts = 0;
-    const maxAttempts = 100; // Prevent infinite loop
     
-    // If we've used all possible questions, clear the used questions set
-    if (gameState.usedQuestions.size >= getMaxPossibleQuestions()) {
+    if (gameState.usedQuestions.size >= GameLogic.calculateMaxQuestions(numbers, gameState.selectedOperation)) {
         gameState.usedQuestions.clear();
     }
     
     do {
         if (gameState.selectedOperation === 'subtraction') {
-            // For subtraction, use one of the selected numbers as minuend
             num1 = numbers[Math.floor(Math.random() * numbers.length)];
-            // Generate a random number less than or equal to num1
             num2 = Math.floor(Math.random() * (num1 + 1));
             answer = num1 - num2;
         } else if (gameState.selectedOperation === 'multiplication') {
-            // For multiplication, ensure at least one number is from selection
-            // and the other can be any number from 1 to 12
-            if (Math.random() < 0.5) {
-                // Use selected number as first number
-                num1 = numbers[Math.floor(Math.random() * numbers.length)];
-                num2 = Math.floor(Math.random() * 12) + 1; // Random number 1-12
-            } else {
-                // Use selected number as second number
-                num1 = Math.floor(Math.random() * 12) + 1; // Random number 1-12
-                num2 = numbers[Math.floor(Math.random() * numbers.length)];
-            }
+            const useSelectedFirst = Math.random() < 0.5;
+            num1 = useSelectedFirst ? 
+                numbers[Math.floor(Math.random() * numbers.length)] : 
+                Math.floor(Math.random() * CONSTANTS.MAX_MULTIPLIER) + CONSTANTS.MIN_MULTIPLIER;
+            num2 = useSelectedFirst ? 
+                Math.floor(Math.random() * CONSTANTS.MAX_MULTIPLIER) + CONSTANTS.MIN_MULTIPLIER : 
+                numbers[Math.floor(Math.random() * numbers.length)];
             answer = num1 * num2;
         } else {
-            // Addition remains the same
             num1 = numbers[Math.floor(Math.random() * numbers.length)];
             num2 = numbers[Math.floor(Math.random() * numbers.length)];
             answer = num1 + num2;
         }
         
-        // Create a unique key for this question
-        // For multiplication, order doesn't matter (2×3 is same as 3×2)
-        if (gameState.selectedOperation === 'multiplication') {
-            questionKey = [Math.min(num1, num2), Math.max(num1, num2), gameState.selectedOperation].join(',');
-        } else {
-            questionKey = [num1, num2, gameState.selectedOperation].join(',');
-        }
+        questionKey = gameState.selectedOperation === 'multiplication' ?
+            [Math.min(num1, num2), Math.max(num1, num2), gameState.selectedOperation].join(',') :
+            [num1, num2, gameState.selectedOperation].join(',');
         
         attempts++;
-        // If we've tried too many times to find a unique question,
-        // break the loop and use the current question
-        if (attempts >= maxAttempts) {
-            break;
-        }
-    } while (gameState.usedQuestions.has(questionKey));
+    } while (gameState.usedQuestions.has(questionKey) && attempts < CONSTANTS.MAX_ATTEMPTS);
     
-    // Add this question to used questions
     gameState.usedQuestions.add(questionKey);
-    
-    gameState.currentQuestion = {
-        num1: num1,
-        num2: num2,
-        operation: gameState.selectedOperation
-    };
+    gameState.currentQuestion = { num1, num2, operation: gameState.selectedOperation };
     gameState.correctAnswer = answer;
     
-    // Generate options
-    const options = new Set([answer]);
-    while (options.size < 4) {
-        let wrongAnswer;
-        if (gameState.selectedOperation === 'addition') {
-            wrongAnswer = answer + (Math.random() < 0.5 ? 1 : -1) * (1 + Math.floor(Math.random() * 3));
-        } else if (gameState.selectedOperation === 'subtraction') {
-            wrongAnswer = answer + (Math.random() < 0.5 ? 1 : -1) * (1 + Math.floor(Math.random() * 3));
-        } else { // multiplication
-            wrongAnswer = answer + (Math.random() < 0.5 ? 1 : -1) * (1 + Math.floor(Math.random() * (answer / 2)));
-        }
-        if (wrongAnswer >= 0) {
-            options.add(wrongAnswer);
-        }
-    }
-    
-    gameState.options = Array.from(options).sort((a, b) => a - b);
-    
-    // Update UI
-    const operationSymbol = {
-        'addition': '+',
-        'subtraction': '−',
-        'multiplication': '×'
-    }[gameState.selectedOperation];
-    
+    const operationSymbol = GameLogic.getOperationSymbol(gameState.selectedOperation);
     questionDisplay.textContent = `${num1} ${operationSymbol} ${num2} = ?`;
     currentOperationDisplay.textContent = operationSymbol;
     
-    // Update answer buttons
+    gameState.options = GameLogic.generateOptions(answer, gameState.selectedOperation);
     const shuffledOptions = [...gameState.options].sort(() => Math.random() - 0.5);
     answerButtons.forEach((button, index) => {
         button.textContent = shuffledOptions[index];
     });
-}
-
-// Helper function to calculate maximum possible unique questions
-function getMaxPossibleQuestions() {
-    const numbers = Array.from(gameState.selectedNumbers);
-    
-    if (gameState.selectedOperation === 'multiplication') {
-        // For multiplication, each selected number can be paired with numbers 1-12
-        return numbers.length * 12;
-    } else if (gameState.selectedOperation === 'subtraction') {
-        // For subtraction, each selected number can be paired with numbers 0 to itself
-        let total = 0;
-        numbers.forEach(n => {
-            total += n + 1; // +1 because we include 0
-        });
-        return total;
-    } else { // addition
-        // For addition, it's the number of possible combinations of selected numbers
-        return numbers.length * numbers.length;
-    }
 }
 
 // Update the question progress display
@@ -431,16 +471,15 @@ function updateQuestionProgress() {
 
 // Start the timer
 function startTimer() {
+    const totalTime = gameState.timeLimit * 1000;
     gameState.timeRemaining = gameState.timeLimit;
-    timerDisplay.textContent = gameState.timeRemaining;
-    timerBar.style.width = '100%';
+    UIManager.updateTimer(gameState.timeLimit, totalTime);
     
     if (gameState.timerInterval) {
         clearInterval(gameState.timerInterval);
     }
     
     const startTime = Date.now();
-    const totalTime = gameState.timeLimit * 1000;
     
     gameState.timerInterval = setInterval(() => {
         const elapsed = Date.now() - startTime;
@@ -452,14 +491,13 @@ function startTimer() {
             const seconds = Math.ceil(remaining / 1000);
             if (seconds !== gameState.timeRemaining) {
                 gameState.timeRemaining = seconds;
-                timerDisplay.textContent = seconds;
-                if (seconds <= 3) {
+                UIManager.updateTimer(seconds, totalTime);
+                if (seconds <= CONSTANTS.LOW_TIME_THRESHOLD) {
                     playSoundSafely(timerTickSound);
                 }
             }
-            timerBar.style.width = `${(remaining / totalTime) * 100}%`;
         }
-    }, 100);
+    }, CONSTANTS.TIMER_INTERVAL);
 }
 
 // Handle time's up
@@ -468,43 +506,31 @@ function timeUp() {
 
     if (gameState.timerInterval) {
         clearInterval(gameState.timerInterval);
+        gameState.timerInterval = null;
     }
     
     playSoundSafely(wrongSound);
-    
-    // Find and highlight the correct answer button
-    answerButtons.forEach(button => {
-        if (button.textContent.trim() === gameState.correctAnswer.toString()) {
-            button.classList.add('bg-green-500', 'text-white');
-        }
-    });
-    
-    if (feedbackDisplay) {
-        feedbackDisplay.textContent = 'Time\'s up!';
-        feedbackDisplay.className = 'text-center text-lg font-bold mb-4 text-red-600';
-        feedbackDisplay.classList.remove('hidden');
-    }
+    UIManager.highlightCorrectAnswer(gameState.correctAnswer);
+    UIManager.updateFeedback('Time\'s up!', true);
     
     gameState.isTransitioning = true;
     
-    setTimeout(() => {
+    const timeout = setTimeout(() => {
         if (gameState.questionsAnswered < gameState.totalQuestions - 1) {
-            // Reset button styles
-            answerButtons.forEach(button => {
-                button.classList.remove('bg-green-500', 'text-white');
-            });
+            UIManager.resetAnswerButtons();
             gameState.questionsAnswered++;
             updateQuestionProgress();
             generateQuestion();
             startTimer();
-            if (feedbackDisplay) {
-                feedbackDisplay.classList.add('hidden');
-            }
+            UIManager.hideFeedback();
         } else {
             showResults();
         }
         gameState.isTransitioning = false;
-    }, 2000);
+    }, CONSTANTS.TRANSITION_DELAY);
+    
+    // Track the timeout
+    gameState.pendingTimeouts.push(timeout);
 }
 
 // Check the player's answer
@@ -513,9 +539,12 @@ function checkAnswer(playerAnswer) {
 
     if (gameState.timerInterval) {
         clearInterval(gameState.timerInterval);
+        gameState.timerInterval = null;
     }
     
-    const isCorrect = playerAnswer === gameState.correctAnswer;
+    gameState.isTransitioning = true;
+    
+    const isCorrect = parseInt(playerAnswer) === gameState.correctAnswer;
     
     if (isCorrect) {
         gameState.score += Math.ceil(gameState.timeRemaining);
@@ -523,37 +552,29 @@ function checkAnswer(playerAnswer) {
         scoreDisplay.textContent = gameState.score;
         playSoundSafely(correctSound);
         
-        if (feedbackDisplay) {
-            feedbackDisplay.textContent = 'Correct!';
-            feedbackDisplay.className = 'text-center text-lg font-bold mb-4 text-green-600';
-            feedbackDisplay.classList.remove('hidden');
-        }
+        UIManager.updateFeedback('Correct!');
     } else {
         playSoundSafely(wrongSound);
         
-        if (feedbackDisplay) {
-            feedbackDisplay.textContent = `Wrong! The answer was ${gameState.correctAnswer}`;
-            feedbackDisplay.className = 'text-center text-lg font-bold mb-4 text-red-600';
-            feedbackDisplay.classList.remove('hidden');
-        }
+        UIManager.updateFeedback(`Wrong! The answer was ${gameState.correctAnswer}`, true);
     }
     
-    gameState.isTransitioning = true;
-    
-    setTimeout(() => {
+    const timeout = setTimeout(() => {
         if (gameState.questionsAnswered < gameState.totalQuestions - 1) {
+            UIManager.resetAnswerButtons();
             gameState.questionsAnswered++;
             updateQuestionProgress();
             generateQuestion();
             startTimer();
-            if (feedbackDisplay) {
-                feedbackDisplay.classList.add('hidden');
-            }
+            UIManager.hideFeedback();
         } else {
             showResults();
         }
         gameState.isTransitioning = false;
-    }, 1500);
+    }, CONSTANTS.TRANSITION_DELAY);
+    
+    // Track the timeout
+    gameState.pendingTimeouts.push(timeout);
 }
 
 // Show results
@@ -589,12 +610,13 @@ function createConfetti(count) {
         confetti.style.opacity = Math.random();
         document.body.appendChild(confetti);
         
-        // Remove confetti after animation
-        setTimeout(() => {
+        // Remove confetti after animation and track the timeout
+        const timeout = setTimeout(() => {
             if (confetti.parentNode) {
                 confetti.parentNode.removeChild(confetti);
             }
         }, 5000);
+        gameState.pendingTimeouts.push(timeout);
     }
 }
 
