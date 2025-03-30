@@ -35,8 +35,21 @@ const CONSTANTS = {
     TRANSITION_DELAY: 1500,
     ANSWER_OPTIONS: 4,
     MIN_MULTIPLIER: 1,
-    MAX_MULTIPLIER: 12,
+    MAX_MULTIPLIER: 10, // Changed from 12 to 10
     MAX_ATTEMPTS: 100 // Add this line
+};
+
+// Operation symbols and names
+const OPERATION_SYMBOLS = {
+    'addition': '+',
+    'subtraction': '−',
+    'multiplication': '×'
+};
+
+const OPERATION_NAMES = {
+    'addition': 'Addition',
+    'subtraction': 'Subtraction',
+    'multiplication': 'Multiplication'
 };
 
 // DOM Elements
@@ -174,13 +187,15 @@ function stopGame() {
     }
 
     // Clear any pending timeouts
-    gameState.pendingTimeouts.forEach(timeout => clearTimeout(timeout));
-    gameState.pendingTimeouts = [];
+    while (gameState.pendingTimeouts.length > 0) {
+        clearTimeout(gameState.pendingTimeouts.pop());
+    }
 
     // Reset game state
-    resetGame();
-
-    // Reset transitioning flag
+    gameState.currentQuestion = null;
+    gameState.correctAnswer = null;
+    gameState.options = [];
+    gameState.usedQuestions.clear(); // Clear used questions when stopping game
     gameState.isTransitioning = false;
 
     // Show selection screen
@@ -399,6 +414,15 @@ function generateQuestion() {
         return;
     }
 
+    let num1, num2, answer;
+    let questionKey;
+    let attempts = 0;
+    let validQuestion = false;
+    
+    // Randomly select one of the chosen operations
+    const operations = Array.from(gameState.selectedOperations);
+    const currentOperation = operations[Math.floor(Math.random() * operations.length)];
+    
     // Check if we've used all possible questions
     const maxPossible = getMaxPossibleQuestions();
     console.log('Max possible questions:', maxPossible, 'Used questions:', gameState.usedQuestions.size);
@@ -409,15 +433,6 @@ function generateQuestion() {
         gameState.usedQuestions.clear();
         console.log('Used questions cleared, now:', Array.from(gameState.usedQuestions));
     }
-
-    let num1, num2, answer;
-    let questionKey;
-    let attempts = 0;
-    let validQuestion = false;
-    
-    // Randomly select one of the chosen operations
-    const operations = Array.from(gameState.selectedOperations);
-    const currentOperation = operations[Math.floor(Math.random() * operations.length)];
     
     // Keep trying until we get a valid, unused question
     do {
@@ -434,7 +449,7 @@ function generateQuestion() {
             answer = num1 - num2;
             questionKey = `${num1}-${num2}`;
         } else if (currentOperation === 'multiplication') {
-            // For multiplication, use one available number and one from 1-12
+            // For multiplication, use one available number and one from 1-10
             num1 = availableNumbers[Math.floor(Math.random() * availableNumbers.length)];
             do {
                 num2 = Math.floor(Math.random() * CONSTANTS.MAX_MULTIPLIER) + CONSTANTS.MIN_MULTIPLIER;
@@ -462,6 +477,14 @@ function generateQuestion() {
         
         attempts++;
     } while ((gameState.usedQuestions.has(questionKey) || !validQuestion) && attempts < CONSTANTS.MAX_ATTEMPTS);
+
+    // If we couldn't find a valid question after max attempts, clear used questions and try again
+    if (attempts >= CONSTANTS.MAX_ATTEMPTS) {
+        console.log('Max attempts reached without finding valid question, clearing used questions');
+        gameState.usedQuestions.clear();
+        generateQuestion();
+        return;
+    }
     
     // Mark this question as used
     gameState.usedQuestions.add(questionKey);
@@ -471,51 +494,17 @@ function generateQuestion() {
     // Store current question info
     gameState.currentQuestion = { num1, num2, operation: currentOperation };
     gameState.correctAnswer = answer;
-    
+
+    // Update the question display
+    questionDisplay.textContent = `${num1} ${OPERATION_SYMBOLS[currentOperation]} ${num2} = ?`;
+    currentOperationDisplay.textContent = OPERATION_NAMES[currentOperation];
+
     // Generate options
-    const incorrectOptions = [];
-    const usedAnswers = new Set([answer]);
-    
-    // Generate wrong answers within a reasonable range
-    while (incorrectOptions.length < CONSTANTS.ANSWER_OPTIONS - 1) {
-        let wrongAnswer;
-        if (currentOperation === 'multiplication') {
-            // For multiplication, use nearby multiples
-            const base = Math.random() < 0.5 ? num1 : num2;
-            const diff = Math.floor(Math.random() * 5) - 2; // -2 to +2
-            wrongAnswer = base * (Math.floor(answer / base) + diff);
-        } else {
-            // For addition/subtraction, use nearby numbers
-            const diff = Math.floor(Math.random() * 5) + 1;
-            wrongAnswer = answer + (Math.random() < 0.5 ? diff : -diff);
-        }
-        
-        // Ensure wrong answer is positive and not already used
-        if (wrongAnswer >= 0 && !usedAnswers.has(wrongAnswer)) {
-            incorrectOptions.push(wrongAnswer);
-            usedAnswers.add(wrongAnswer);
-        }
-    }
-    
-    // Combine and shuffle options
-    gameState.options = [answer, ...incorrectOptions];
-    
-    // Update UI with new question
-    const operationSymbol = {
-        'addition': '+',
-        'subtraction': '−',
-        'multiplication': '×'
-    }[currentOperation];
-    
-    // Update UI with new question
-    questionDisplay.textContent = `${num1} ${operationSymbol} ${num2} = ?`;
-    currentOperationDisplay.textContent = operationSymbol;
-    
-    // Update answer buttons with new options
-    const shuffledOptions = [...gameState.options].sort(() => Math.random() - 0.5);
-    answerButtons.forEach((button, index) => {
-        button.textContent = shuffledOptions[index];
-        button.className = 'answer-btn bg-white hover:bg-blue-100 text-blue-700 font-semibold py-3 px-6 border border-blue-500 rounded-lg shadow-md transition duration-200';
+    gameState.options = generateOptions(answer, currentOperation);
+
+    // Update answer buttons
+    gameState.options.forEach((option, index) => {
+        answerButtons[index].textContent = option;
     });
 }
 
@@ -526,9 +515,9 @@ function getMaxPossibleQuestions() {
     const currentOperation = Array.from(gameState.selectedOperations)[0];
     
     if (currentOperation === 'multiplication') {
-        // For multiplication, each available number can be paired with numbers 1-12
+        // For multiplication, each available number can be paired with numbers 1-10
         // But we need to account for commutative property (4x5 is same as 5x4)
-        return numbers.length * 12;
+        return numbers.length * 10; 
     } else if (currentOperation === 'subtraction') {
         // For subtraction, each selected number can be paired with numbers 0 to itself
         let total = 0;
@@ -830,17 +819,17 @@ function createConfetti(count) {
 
 // Complete game reset function
 function resetGame() {
-    // Reset game state
+    // Clear all game state
     gameState.score = 0;
     gameState.questionsAnswered = 0;
     gameState.questionsCorrect = 0;
     gameState.currentQuestion = null;
     gameState.correctAnswer = null;
     gameState.options = [];
+    gameState.usedQuestions.clear(); // Clear used questions on reset
     gameState.isTransitioning = false;
-    gameState.timeRemaining = gameState.timeLimit;
     
-    // Clear any existing timer
+    // Clear timer if running
     if (gameState.timerInterval) {
         clearInterval(gameState.timerInterval);
         gameState.timerInterval = null;
@@ -850,21 +839,52 @@ function resetGame() {
     while (gameState.pendingTimeouts.length > 0) {
         clearTimeout(gameState.pendingTimeouts.pop());
     }
-    
-    // Reset displays
+
+    // Reset UI elements
     scoreDisplay.textContent = '0';
-    UIManager.resetAnswerButtons();
-    UIManager.hideFeedback();
+    questionDisplay.textContent = '';
+    currentOperationDisplay.textContent = '';
+    updateQuestionProgress();
     
-    // Reset timer display
-    if (timerDisplay) {
-        timerDisplay.textContent = gameState.timeLimit;
+    // Reset answer buttons
+    answerButtons.forEach(button => {
+        button.textContent = '';
+        button.className = 'answer-btn bg-white hover:bg-blue-100 text-blue-700 font-semibold py-3 px-6 border border-blue-500 rounded-lg shadow-md transition duration-200';
+    });
+    
+    // Reset timer bar
+    timerBar.style.width = '100%';
+    timerBar.classList.remove('bg-red-500');
+    timerBar.classList.add('bg-blue-500');
+}
+
+// Generate answer options for a question
+function generateOptions(correctAnswer, operation) {
+    const usedAnswers = new Set([correctAnswer]);
+    const options = [correctAnswer];
+
+    // Generate wrong answers within a reasonable range
+    while (options.length < CONSTANTS.ANSWER_OPTIONS) {
+        let wrongAnswer;
+        if (operation === 'multiplication') {
+            // For multiplication, use nearby multiples
+            const diff = Math.floor(Math.random() * 5) - 2; // -2 to +2
+            wrongAnswer = correctAnswer + (diff * Math.max(1, Math.floor(correctAnswer / 10)));
+        } else {
+            // For addition/subtraction, use nearby numbers
+            const diff = Math.floor(Math.random() * 5) + 1;
+            wrongAnswer = correctAnswer + (Math.random() < 0.5 ? diff : -diff);
+        }
+        
+        // Ensure wrong answer is positive and not already used
+        if (wrongAnswer >= 0 && !usedAnswers.has(wrongAnswer)) {
+            options.push(wrongAnswer);
+            usedAnswers.add(wrongAnswer);
+        }
     }
-    if (timerBar) {
-        timerBar.style.width = '100%';
-        timerBar.classList.remove('bg-red-500');
-        timerBar.classList.add('bg-blue-500');
-    }
+
+    // Shuffle options
+    return options.sort(() => Math.random() - 0.5);
 }
 
 // Initialize the game when the DOM is loaded
