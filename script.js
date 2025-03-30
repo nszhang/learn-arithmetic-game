@@ -244,7 +244,12 @@ function initGame() {
             // Ignore clicks on the checkbox
             if (e.target.type === 'checkbox') return;
             
+            // Don't allow selection if number is excluded
             const number = parseInt(button.dataset.number);
+            if (gameState.excludedNumbers.has(number)) {
+                return;
+            }
+            
             button.classList.toggle('selected');
             if (button.classList.contains('selected')) {
                 gameState.selectedNumbers.add(number);
@@ -267,13 +272,17 @@ function initGame() {
             
             // Toggle excluded state
             if (button.classList.contains('bg-red-500')) {
+                // Removing exclusion
                 button.classList.remove('bg-red-500', 'opacity-100');
                 button.classList.add('opacity-0');
+                numberBtn.classList.remove('cursor-not-allowed', 'opacity-50');
                 gameState.excludedNumbers.delete(number);
             } else {
+                // Adding exclusion
                 // If number is excluded, it can't be selected
                 gameState.selectedNumbers.delete(number);
                 numberBtn.classList.remove('selected');
+                numberBtn.classList.add('cursor-not-allowed', 'opacity-50');
                 button.classList.remove('opacity-0');
                 button.classList.add('bg-red-500', 'opacity-100');
                 gameState.excludedNumbers.add(number);
