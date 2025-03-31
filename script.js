@@ -390,6 +390,9 @@ function startGame() {
     gameState.questionsCorrect = 0;
     gameState.isTransitioning = false;
     
+    // Clear any previous feedback
+    UIManager.hideFeedback();
+    
     // Update displays
     scoreDisplay.textContent = gameState.score;
     updateQuestionProgress();
@@ -865,6 +868,9 @@ function resetGame() {
     timerBar.style.width = '100%';
     timerBar.classList.remove('bg-red-500');
     timerBar.classList.add('bg-blue-500');
+
+    // Clear any feedback messages
+    UIManager.hideFeedback();
 }
 
 // Generate answer options for a question
